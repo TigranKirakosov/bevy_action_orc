@@ -15,8 +15,7 @@ impl ActionOrcCommandsExt for Commands<'_, '_> {
             let allocator = world.entity_allocator();
             let allocated = RefCell::new(Vec::new());
 
-            let mut reactor = Reactor::from(graph);
-            reactor.map_extern_ids(|meta: &Meta| {
+            let mut reactor = Reactor::from(graph, |meta: &Meta| {
                 let entity = allocator.alloc();
                 allocated.borrow_mut().push((entity, *meta.type_id()));
                 entity
