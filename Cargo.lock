@@ -5,8 +5,6 @@ version = 4
 [[package]]
 name = "action-orc"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17d8a6a3da0a3d27cd85f63d3875e956154f14ee79c79221c0e159688d9ad02a"
 dependencies = [
  "action-orc-core",
  "action-orc-engine",
@@ -16,14 +14,10 @@ dependencies = [
 [[package]]
 name = "action-orc-core"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b9649e378db970cdaf218b2139409212b759f99be9e852ff256b67f86663877"
 
 [[package]]
 name = "action-orc-engine"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc1a56a47db281cfcc6c7e0e0eb8e7c2c3d33ee0325ac5b05fcf63d8ae262b8e"
 dependencies = [
  "action-orc-core",
  "action-orc-macros",
@@ -32,8 +26,6 @@ dependencies = [
 [[package]]
 name = "action-orc-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f495fed0034ca128b51ea581615310a16272380318f3957f640b95f08f6c76fc"
 dependencies = [
  "action-orc-core",
  "proc-macro2",
@@ -123,6 +115,7 @@ version = "0.1.0"
 dependencies = [
  "action-orc",
  "bevy",
+ "crossbeam",
 ]
 
 [[package]]
@@ -511,6 +504,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
 dependencies = [
  "unicode-segmentation",
+]
+
+[[package]]
+name = "crossbeam"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e71406cd8807725f7ac2f999a4cdd32e98f829fdf65f528343cebf945e41df1e"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-epoch",
+ "crossbeam-queue",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-deque"
+version = "0.8.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]

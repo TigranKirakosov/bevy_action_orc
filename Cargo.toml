@@ -7,5 +7,6 @@ repository = "https://github.com/TigranKirakosov/bevy_action_orc"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-action-orc = { version = "0.1.0" }
+action-orc = { version = "0.1.0", path = "../action_orc" }
 bevy = { version = "0.19.1", default-features = false }
+crossbeam = "0.8.5"
