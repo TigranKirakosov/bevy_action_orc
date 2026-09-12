@@ -1,14 +1,17 @@
 use action_orc::*;
 use bevy::{platform::collections::HashSet, prelude::*};
 
-use crate::reactor::{Orc, OrcChannel, OrcMessage, OrcNode};
+use crate::{
+    Orc, OrcNode,
+    schedule::{OrcChannel, OrcMessage},
+};
 
 pub trait OrcCommandsExt {
-    fn launch_orc(&mut self, graph: Graph);
+    fn queue_orc(&mut self, graph: Graph);
 }
 
 impl OrcCommandsExt for Commands<'_, '_> {
-    fn launch_orc(&mut self, graph: Graph) {
+    fn queue_orc(&mut self, graph: Graph) {
         self.queue(move |world: &mut World| {
             let reactor_id = world.commands().spawn_empty().id();
             let mut reactor = Reactor::from(graph);

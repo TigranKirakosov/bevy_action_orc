@@ -1,16 +1,24 @@
 use action_orc::{NodeStatus, Resolution};
 use bevy::prelude::*;
+use crossbeam::channel::{Receiver, Sender, unbounded};
 
-use crate::reactor::{Orc, OrcChannel, OrcMessage, OrcNode, OrcTypeRegistry, ResolveNode};
+use crate::{Orc, OrcNode, ResolveNode, registry::OrcTypeRegistry};
 
-pub struct ActionOrcPlugin;
-impl Plugin for ActionOrcPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<OrcChannel>();
-        app.init_resource::<OrcTypeRegistry>();
-        app.add_systems(Update, (init_orcs, drain_orc_messages).chain());
-        app.add_observer(resolve_node);
-    }
+#[derive(Resource)]
+pub struct OrcChannel {
+    pub(crate) tx: Sender<OrcMessage>,
+    pub(crate) rx: Receiver<OrcMessage>,
+}
+
+pub struct OrcMessage {
+    pub(crate) node_entity: Entity,
+    pub(crate) status: NodeStatus,
+}
+
+pub(super) fn plugin(app: &mut App) {
+    app.init_resource::<OrcChannel>();
+    app.add_systems(Update, (init_orcs, drain_orc_messages).chain());
+    app.add_observer(resolve_node);
 }
 
 fn init_orcs(orcs: Query<&mut Orc, Added<Orc>>) {
@@ -20,14 +28,15 @@ fn init_orcs(orcs: Query<&mut Orc, Added<Orc>>) {
 }
 
 fn resolve_node(on: On<ResolveNode>, mut reactors: Query<&mut Orc>) {
-    let ResolveNode {
+    let &ResolveNode {
         reactor_id,
         node_id,
+        resolution,
     } = on.event();
 
-    let mut reactor = reactors.get_mut(*reactor_id).expect("ReactorId mismatch");
+    let mut reactor = reactors.get_mut(reactor_id).expect("ReactorId mismatch");
     reactor
-        .resolve(*node_id, Resolution::Finished)
+        .resolve(node_id, resolution)
         .expect("Node id mismatch");
 }
 
@@ -35,7 +44,7 @@ fn drain_orc_messages(world: &mut World) {
     let channel = world.resource::<OrcChannel>();
     let messages: Vec<_> = channel.rx.try_iter().collect();
 
-    world.resource_scope::<OrcTypeRegistry, ()>(|world: &mut World, reactor_registry| {
+    world.resource_scope::<OrcTypeRegistry, ()>(|world: &mut World, orc_type_registry| {
         let app_type_registry = world.resource::<AppTypeRegistry>().clone();
         let type_registry = app_type_registry.read();
 
@@ -48,16 +57,16 @@ fn drain_orc_messages(world: &mut World) {
                 .get::<OrcNode>(node_entity)
                 .expect("Missing orc node component.");
 
-            let node_status = (match status {
-                NodeStatus::Started => reactor_registry.started.get(&node.type_id),
+            let status_type = *(match status {
+                NodeStatus::Started => orc_type_registry.started.get(&node.type_id),
                 NodeStatus::Resolved(res) => match res {
-                    Resolution::Finished => reactor_registry.finished.get(&node.type_id),
+                    Resolution::Finished => orc_type_registry.finished.get(&node.type_id),
                 },
             })
             .expect("Component TypeId mistmatch.");
 
             let registration = type_registry
-                .get(*node_status)
+                .get(status_type)
                 .expect("Missing registration for type");
             let reflect_component = registration
                 .data::<ReflectComponent>()
@@ -76,4 +85,11 @@ fn drain_orc_messages(world: &mut World) {
             );
         }
     });
+}
+
+impl Default for OrcChannel {
+    fn default() -> Self {
+        let (tx, rx) = unbounded();
+        Self { tx, rx }
+    }
 }

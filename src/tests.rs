@@ -1,11 +1,10 @@
 use action_orc::*;
 
 use crate::{
-    app_ext::ActionOrcAppExt,
-    commands_ext::OrcCommandsExt,
+    OrcNode, OrcPlugin, ResolveNode,
+    commands::OrcCommandsExt,
     lifecycle::{Finished, Started},
-    plugin::ActionOrcPlugin,
-    reactor::{OrcNode, ResolveNode},
+    registry::OrcAppExt,
 };
 use bevy::prelude::*;
 use local_macros::*;
@@ -16,7 +15,7 @@ struct Log(Vec<(&'static str, &'static str)>);
 #[test]
 fn integration_example() {
     let mut app = App::new();
-    app.add_plugins(ActionOrcPlugin);
+    app.add_plugins(OrcPlugin);
     app.init_resource::<Log>();
 
     // Expanded `register_nodes!`
@@ -46,7 +45,7 @@ fn integration_example() {
         A -> B -> C;
     );
 
-    app.world_mut().commands().launch_orc(graph);
+    app.world_mut().commands().queue_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 4);
@@ -70,7 +69,7 @@ fn integration_example() {
 #[test]
 fn parallel_concurrency() {
     let mut app = App::new();
-    app.add_plugins(ActionOrcPlugin);
+    app.add_plugins(OrcPlugin);
     app.init_resource::<Log>();
 
     register_nodes!(app, A, B, C);
@@ -79,7 +78,7 @@ fn parallel_concurrency() {
     let graph = orc!(
         (A | B) -> C;
     );
-    app.world_mut().commands().launch_orc(graph);
+    app.world_mut().commands().queue_orc(graph);
 
     tick(&mut app, 2);
 
@@ -106,7 +105,7 @@ fn parallel_concurrency() {
 #[test]
 fn embedded_linear_composition() {
     let mut app = App::new();
-    app.add_plugins(ActionOrcPlugin);
+    app.add_plugins(OrcPlugin);
     app.init_resource::<Log>();
 
     register_nodes!(app, Enter, X, Y, Exit);
@@ -120,7 +119,7 @@ fn embedded_linear_composition() {
         Enter -> #[sub] -> Exit;
     );
 
-    app.world_mut().commands().launch_orc(graph);
+    app.world_mut().commands().queue_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -147,7 +146,7 @@ fn embedded_linear_composition() {
 #[test]
 fn embedded_parallel_composition() {
     let mut app = App::new();
-    app.add_plugins(ActionOrcPlugin);
+    app.add_plugins(OrcPlugin);
     app.init_resource::<Log>();
 
     register_nodes!(app, Enter, ConcurrentTask, X, Y, Exit);
@@ -161,7 +160,7 @@ fn embedded_parallel_composition() {
         Enter -> ( ConcurrentTask | #[sub] ) -> Exit;
     );
 
-    app.world_mut().commands().launch_orc(graph);
+    app.world_mut().commands().queue_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -190,7 +189,7 @@ fn embedded_parallel_composition() {
 #[test]
 fn embedded_back_to_back_composition() {
     let mut app = App::new();
-    app.add_plugins(ActionOrcPlugin);
+    app.add_plugins(OrcPlugin);
     app.init_resource::<Log>();
 
     register_nodes!(app, Enter, A, B, X, Y, Exit);
@@ -200,7 +199,7 @@ fn embedded_back_to_back_composition() {
     let sub_b = orc!(X -> Y;);
     let graph = orc!(Enter -> #[sub_a] -> #[sub_b] -> Exit;);
 
-    app.world_mut().commands().launch_orc(graph);
+    app.world_mut().commands().queue_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 7);
@@ -232,7 +231,7 @@ fn embedded_back_to_back_composition() {
 #[test]
 fn concept_warchief_campaign() {
     let mut app = App::new();
-    app.add_plugins(ActionOrcPlugin);
+    app.add_plugins(OrcPlugin);
     app.init_resource::<Log>();
 
     register_nodes! {
@@ -292,7 +291,7 @@ fn concept_warchief_campaign() {
     let reinforce = orc!(X -> Y;);
 
     let graph = warchief_campaign(&reinforce);
-    app.world_mut().commands().launch_orc(graph);
+    app.world_mut().commands().queue_orc(graph);
 
     // No ECS wind-up: some action resolved at the same frame
     tick(&mut app, 8);
@@ -352,6 +351,7 @@ fn on_started<T: FromReflect + TypePath + Default>(
         commands.trigger(ResolveNode {
             reactor_id,
             node_id,
+            resolution: Resolution::Finished,
         });
     }
 }
