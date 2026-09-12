@@ -2,10 +2,10 @@ use action_orc::*;
 
 use crate::{
     app_ext::ActionOrcAppExt,
-    commands_ext::ActionOrcCommandsExt,
-    lifecycle::{Resolved, Started},
+    commands_ext::OrcCommandsExt,
+    lifecycle::{Finished, Started},
     plugin::ActionOrcPlugin,
-    reactor::{ResolveNode, ScheduleNode},
+    reactor::{OrcNode, ResolveNode},
 };
 use bevy::prelude::*;
 use local_macros::*;
@@ -35,9 +35,9 @@ fn integration_example() {
     app.add_systems(
         Update,
         (
-            (on_started::<A>, on_resolved::<A>),
-            (on_started::<B>, on_resolved::<B>),
-            (on_started::<C>, on_resolved::<C>),
+            (on_started::<A>, on_finished::<A>),
+            (on_started::<B>, on_finished::<B>),
+            (on_started::<C>, on_finished::<C>),
         )
             .chain(),
     );
@@ -46,7 +46,7 @@ fn integration_example() {
         A -> B -> C;
     );
 
-    app.world_mut().commands().launch_reactor(graph);
+    app.world_mut().commands().launch_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 4);
@@ -56,13 +56,13 @@ fn integration_example() {
         &[
         /* Wave 1 */("Started", "A"),
 
-        /* Wave 2 */("Resolved", "A"),
+        /* Wave 2 */("Finished", "A"),
                     ("Started", "B"),
 
-        /* Wave 3 */("Resolved", "B"),
+        /* Wave 3 */("Finished", "B"),
                     ("Started", "C"),
 
-        /* Wave 4 */("Resolved", "C"),
+        /* Wave 4 */("Finished", "C"),
         ]
     };
 }
@@ -79,7 +79,7 @@ fn parallel_concurrency() {
     let graph = orc!(
         (A | B) -> C;
     );
-    app.world_mut().commands().launch_reactor(graph);
+    app.world_mut().commands().launch_orc(graph);
 
     tick(&mut app, 2);
 
@@ -92,15 +92,15 @@ fn parallel_concurrency() {
 
     let log = app.world().resource::<Log>().as_slice();
     assert_eq!(log.len(), 5);
-    assert!(log.contains(&("Resolved", "A")));
-    assert!(log.contains(&("Resolved", "B")));
+    assert!(log.contains(&("Finished", "A")));
+    assert!(log.contains(&("Finished", "B")));
     assert_eq!(*log.last().unwrap(), ("Started", "C"));
 
     tick(&mut app, 2);
 
     let log = app.world().resource::<Log>().as_slice();
     assert_eq!(log.len(), 6);
-    assert_eq!(*log.last().unwrap(), ("Resolved", "C"));
+    assert_eq!(*log.last().unwrap(), ("Finished", "C"));
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn embedded_linear_composition() {
         Enter -> #[sub] -> Exit;
     );
 
-    app.world_mut().commands().launch_reactor(graph);
+    app.world_mut().commands().launch_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -130,16 +130,16 @@ fn embedded_linear_composition() {
         &[
         /* Wave 1 */("Started", "Enter"),
 
-        /* Wave 2 */("Resolved", "Enter"),
+        /* Wave 2 */("Finished", "Enter"),
                     ("Started", "X"),
 
-        /* Wave 3 */("Resolved", "X"),
+        /* Wave 3 */("Finished", "X"),
                     ("Started", "Y"),
 
-        /* Wave 4 */("Resolved", "Y"),
+        /* Wave 4 */("Finished", "Y"),
                     ("Started", "Exit"),
 
-        /* Wave 5 */("Resolved", "Exit"),
+        /* Wave 5 */("Finished", "Exit"),
         ]
     };
 }
@@ -161,7 +161,7 @@ fn embedded_parallel_composition() {
         Enter -> ( ConcurrentTask | #[sub] ) -> Exit;
     );
 
-    app.world_mut().commands().launch_reactor(graph);
+    app.world_mut().commands().launch_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -171,18 +171,18 @@ fn embedded_parallel_composition() {
         &[
         /* Wave 1 */("Started", "Enter"),
 
-        /* Wave 2 */("Resolved", "Enter"),
+        /* Wave 2 */("Finished", "Enter"),
                     ("Started", "ConcurrentTask"),
                     ("Started", "X"),
 
-        /* Wave 3 */("Resolved", "ConcurrentTask"),
-                    ("Resolved", "X"),
+        /* Wave 3 */("Finished", "ConcurrentTask"),
+                    ("Finished", "X"),
                     ("Started", "Y"),
 
-        /* Wave 4 */("Resolved", "Y"),
+        /* Wave 4 */("Finished", "Y"),
                     ("Started", "Exit"),
 
-        /* Wave 5 */("Resolved", "Exit"),
+        /* Wave 5 */("Finished", "Exit"),
         ]
     };
 }
@@ -200,7 +200,7 @@ fn embedded_back_to_back_composition() {
     let sub_b = orc!(X -> Y;);
     let graph = orc!(Enter -> #[sub_a] -> #[sub_b] -> Exit;);
 
-    app.world_mut().commands().launch_reactor(graph);
+    app.world_mut().commands().launch_orc(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 7);
@@ -209,22 +209,22 @@ fn embedded_back_to_back_composition() {
         &[
         /* Wave 1 */("Started", "Enter"),
 
-        /* Wave 2 */("Resolved", "Enter"),
+        /* Wave 2 */("Finished", "Enter"),
                     ("Started", "A"),
 
-        /* Wave 3 */("Resolved", "A"),
+        /* Wave 3 */("Finished", "A"),
                     ("Started", "B"),
 
-        /* Wave 4 */("Resolved", "B"),
+        /* Wave 4 */("Finished", "B"),
                     ("Started", "X"),
 
-        /* Wave 5 */("Resolved", "X"),
+        /* Wave 5 */("Finished", "X"),
                     ("Started", "Y"),
 
-        /* Wave 6 */("Resolved", "Y"),
+        /* Wave 6 */("Finished", "Y"),
                     ("Started", "Exit"),
 
-        /* Wave 7 */("Resolved", "Exit"),
+        /* Wave 7 */("Finished", "Exit"),
         ]
     };
 }
@@ -292,7 +292,7 @@ fn concept_warchief_campaign() {
     let reinforce = orc!(X -> Y;);
 
     let graph = warchief_campaign(&reinforce);
-    app.world_mut().commands().launch_reactor(graph);
+    app.world_mut().commands().launch_orc(graph);
 
     // No ECS wind-up: some action resolved at the same frame
     tick(&mut app, 8);
@@ -303,61 +303,66 @@ fn concept_warchief_campaign() {
     /* Wave 1 */("Started", "BuildCamp"),
                 ("Started", "PrepareCampaign"),
 
-    /* Wave 2 */("Resolved", "BuildCamp"),
+    /* Wave 2 */("Finished", "BuildCamp"),
                 ("Started", "GatherResources"),
 
-    /* Wave 3 */("Resolved", "PrepareCampaign"),
+    /* Wave 3 */("Finished", "PrepareCampaign"),
                 ("Started", "TrainGrunts"),
                 ("Started", "AssembleArmy"),
 
-    /* Wave 4 */("Resolved", "GatherResources"),
+    /* Wave 4 */("Finished", "GatherResources"),
                 ("Started", "Defend"),
                 ("Started", "RequestReinforcements"),
                 ("Started", "BuildWarmachines"),
 
-    /* Wave 5 */("Resolved", "TrainGrunts"),
-                ("Resolved", "AssembleArmy"),
+    /* Wave 5 */("Finished", "TrainGrunts"),
+                ("Finished", "AssembleArmy"),
                 ("Started", "LaunchCampaign"),
 
-    /* Wave 6 */("Resolved", "Defend"),
-                ("Resolved", "RequestReinforcements"),
-                ("Resolved", "BuildWarmachines"),
-                ("Resolved", "LaunchCampaign"),
+    /* Wave 6 */("Finished", "Defend"),
+                ("Finished", "RequestReinforcements"),
+                ("Finished", "BuildWarmachines"),
+                ("Finished", "LaunchCampaign"),
                 ("Started", "CelebrateVictory"),
                 ("Started", "X"),
 
-    /* Wave 7 */("Resolved", "CelebrateVictory"),
-                ("Resolved", "X"),
+    /* Wave 7 */("Finished", "CelebrateVictory"),
+                ("Finished", "X"),
                 ("Started", "Y"),
 
-    /* Wave 8 */("Resolved", "Y"),
+    /* Wave 8 */("Finished", "Y"),
             ]
         };
 }
 
 fn on_started<T: FromReflect + TypePath + Default>(
-    started: Query<(Entity, &ScheduleNode), Added<Started<T>>>,
+    started: Query<&OrcNode, Added<Started<T>>>,
     mut commands: Commands,
     mut queue: ResMut<Log>,
 ) {
-    for (entity, node) in started {
+    for &OrcNode {
+        reactor_id,
+        node_id,
+        ..
+    } in started
+    {
         let type_str = get_name::<T>();
         queue.push(("Started", type_str));
 
         commands.trigger(ResolveNode {
-            reactor_id: node.reactor_id,
-            node_id: entity,
+            reactor_id,
+            node_id,
         });
     }
 }
 
-fn on_resolved<T: FromReflect + TypePath + Default>(
-    resolved: Query<(), Added<Resolved<T>>>,
+fn on_finished<T: FromReflect + TypePath + Default>(
+    resolved: Query<(), Added<Finished<T>>>,
     mut queue: ResMut<Log>,
 ) {
     for _ in resolved {
         let type_str = get_name::<T>();
-        queue.push(("Resolved", type_str));
+        queue.push(("Finished", type_str));
     }
 }
 
@@ -389,7 +394,7 @@ mod local_macros {
         ($app:expr, $($node:ident),* $(,)?) => {
             $app.add_systems(Update, (
                 $(
-                    (on_started::<$node>, on_resolved::<$node>),
+                    (on_started::<$node>, on_finished::<$node>),
                 )*
             ).chain());
         };

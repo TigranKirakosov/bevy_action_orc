@@ -7,4 +7,4 @@ pub struct Started<T: FromReflect + TypePath + Default>(#[reflect(ignore)] Phant
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component, Default)]
-pub struct Resolved<T: FromReflect + TypePath + Default>(#[reflect(ignore)] PhantomData<T>);
+pub struct Finished<T: FromReflect + TypePath + Default>(#[reflect(ignore)] PhantomData<T>);

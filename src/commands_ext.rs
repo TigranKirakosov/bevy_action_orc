@@ -1,49 +1,57 @@
-use std::cell::RefCell;
-
 use action_orc::*;
-use bevy::prelude::*;
+use bevy::{platform::collections::HashSet, prelude::*};
 
-use crate::reactor::{ReactorChannel, ReactorMessage, ScheduleNode, ScheduleReactor};
+use crate::reactor::{Orc, OrcChannel, OrcMessage, OrcNode};
 
-pub trait ActionOrcCommandsExt {
-    fn launch_reactor(&mut self, graph: Graph);
+pub trait OrcCommandsExt {
+    fn launch_orc(&mut self, graph: Graph);
 }
 
-impl ActionOrcCommandsExt for Commands<'_, '_> {
-    fn launch_reactor(&mut self, graph: Graph) {
+impl OrcCommandsExt for Commands<'_, '_> {
+    fn launch_orc(&mut self, graph: Graph) {
         self.queue(move |world: &mut World| {
-            let allocator = world.entity_allocator();
-            let allocated = RefCell::new(Vec::new());
-
-            let mut reactor = Reactor::from(graph, |meta: &Meta| {
-                let entity = allocator.alloc();
-                allocated.borrow_mut().push((entity, *meta.type_id()));
-                entity
-            });
-
             let reactor_id = world.commands().spawn_empty().id();
+            let mut reactor = Reactor::from(graph);
+            let mut entity_map = Vec::new();
+            let mut type_ids = HashSet::new();
 
-            let tx = world.resource::<ReactorChannel>().tx.clone();
-            let message_collector = move |entity, event| {
-                if let Err(err) = tx.send(ReactorMessage { entity, event }) {
-                    panic!("Failed to send message to ReactorBuffer: {err:?}");
+            for (node_id, meta) in reactor.node_meta() {
+                let type_id = *meta.type_id();
+                let entity = world
+                    .spawn(OrcNode {
+                        type_id,
+                        reactor_id,
+                        node_id,
+                    })
+                    .id();
+
+                entity_map.push(entity);
+                type_ids.insert(type_id);
+            }
+
+            let tx = world.resource::<OrcChannel>().tx.clone();
+            let entity_map_clone = entity_map.clone();
+
+            let message_collector = move |node_id, status| {
+                let node_entity = entity_map_clone[node_id];
+                if let Err(err) = tx.send(OrcMessage {
+                    node_entity,
+                    status,
+                }) {
+                    panic!("Failed to send orc message: {err:?}");
                 }
             };
 
-            for (entity, type_id) in allocated.into_inner() {
-                reactor.listen_for(type_id, message_collector.clone());
-                let _ = world.spawn_empty_at(entity);
-
-                world.entity_mut(entity).insert(ScheduleNode {
-                    reactor_id,
-                    type_id,
-                });
+            for type_id in type_ids {
+                reactor
+                    .listen_for(type_id, message_collector.clone())
+                    .unwrap();
             }
 
             world
                 .commands()
                 .entity(reactor_id)
-                .insert(ScheduleReactor::new(reactor));
+                .insert(Orc::new(reactor, entity_map));
         });
     }
 }
