@@ -10,6 +10,15 @@ mod schedule;
 #[cfg(test)]
 mod tests;
 
+pub mod prelude {
+    use super::*;
+
+    pub use action_orc::{
+        AsGraphEntry, AsGraphEntryProxy, Graph, GraphBounds, GraphBuilder, GraphEntry, Tag, orc,
+    };
+    pub use registry::OrcAppExt;
+}
+
 #[derive(Component)]
 pub struct Orc {
     pub(crate) reactor: Reactor,

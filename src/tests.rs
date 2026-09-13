@@ -45,7 +45,7 @@ fn integration_example() {
         A -> B -> C;
     );
 
-    app.world_mut().commands().queue_orc(graph);
+    app.world_mut().commands().queue_graph(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 4);
@@ -78,7 +78,7 @@ fn parallel_concurrency() {
     let graph = orc!(
         (A | B) -> C;
     );
-    app.world_mut().commands().queue_orc(graph);
+    app.world_mut().commands().queue_graph(graph);
 
     tick(&mut app, 2);
 
@@ -116,10 +116,10 @@ fn embedded_linear_composition() {
     );
 
     let graph = orc!(
-        Enter -> #[sub] -> Exit;
+        Enter -> @sub -> Exit;
     );
 
-    app.world_mut().commands().queue_orc(graph);
+    app.world_mut().commands().queue_graph(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -157,10 +157,10 @@ fn embedded_parallel_composition() {
     );
 
     let graph = orc!(
-        Enter -> ( ConcurrentTask | #[sub] ) -> Exit;
+        Enter -> ( ConcurrentTask | @sub ) -> Exit;
     );
 
-    app.world_mut().commands().queue_orc(graph);
+    app.world_mut().commands().queue_graph(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -197,9 +197,9 @@ fn embedded_back_to_back_composition() {
 
     let sub_a = orc!(A -> B;);
     let sub_b = orc!(X -> Y;);
-    let graph = orc!(Enter -> #[sub_a] -> #[sub_b] -> Exit;);
+    let graph = orc!(Enter -> @sub_a -> @sub_b -> Exit;);
 
-    app.world_mut().commands().queue_orc(graph);
+    app.world_mut().commands().queue_graph(graph);
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 7);
@@ -229,7 +229,7 @@ fn embedded_back_to_back_composition() {
 }
 
 #[test]
-fn concept_warchief_campaign() {
+fn warchief_campaign() {
     let mut app = App::new();
     app.add_plugins(OrcPlugin);
     app.init_resource::<Log>();
@@ -266,24 +266,19 @@ fn concept_warchief_campaign() {
 
     fn warchief_campaign(reinforce: &Graph) -> Graph {
         orc! {
-            // Define first timeline
             BuildCamp -> (
                 gather: GatherResources,
-                // make #[reinforce] dependant on upstream nodes
-                (Defend | RequestReinforcements) -> #[reinforce],
+                (Defend | RequestReinforcements) -> @reinforce,
             );
 
-            // Define second parallel timline, linked with the first one by [gather] and #[reinforce] nodes
             prepare: PrepareCampaign -> (
                 [gather] -> BuildWarmachines
                 | TrainGrunts
-                | #[reinforce] // make this timline dependant on #[reinforce] aswell
+                | @reinforce
             );
 
-            // Declare exit node
             victory: CelebrateVictory;
 
-            // Define path to exit
             [prepare] -> AssembleArmy -> LaunchCampaign -> [victory];
         }
     }
@@ -291,7 +286,107 @@ fn concept_warchief_campaign() {
     let reinforce = orc!(X -> Y;);
 
     let graph = warchief_campaign(&reinforce);
-    app.world_mut().commands().queue_orc(graph);
+    app.world_mut().commands().queue_graph(graph);
+
+    // No ECS wind-up: some action resolved at the same frame
+    tick(&mut app, 8);
+
+    let log = app.world().resource::<Log>().as_slice();
+    assert_eq! {
+        log, &[
+    /* Wave 1 */("Started", "BuildCamp"),
+                ("Started", "PrepareCampaign"),
+
+    /* Wave 2 */("Finished", "BuildCamp"),
+                ("Started", "GatherResources"),
+
+    /* Wave 3 */("Finished", "PrepareCampaign"),
+                ("Started", "TrainGrunts"),
+                ("Started", "AssembleArmy"),
+
+    /* Wave 4 */("Finished", "GatherResources"),
+                ("Started", "Defend"),
+                ("Started", "RequestReinforcements"),
+                ("Started", "BuildWarmachines"),
+
+    /* Wave 5 */("Finished", "TrainGrunts"),
+                ("Finished", "AssembleArmy"),
+                ("Started", "LaunchCampaign"),
+
+    /* Wave 6 */("Finished", "Defend"),
+                ("Finished", "RequestReinforcements"),
+                ("Finished", "BuildWarmachines"),
+                ("Finished", "LaunchCampaign"),
+                ("Started", "CelebrateVictory"),
+                ("Started", "X"),
+
+    /* Wave 7 */("Finished", "CelebrateVictory"),
+                ("Finished", "X"),
+                ("Started", "Y"),
+
+    /* Wave 8 */("Finished", "Y"),
+            ]
+        };
+}
+
+#[test]
+fn warchief_campaign_attr_macro() {
+    let mut app = App::new();
+    app.add_plugins(OrcPlugin);
+    app.init_resource::<Log>();
+
+    register_nodes! {
+        app,
+        BuildCamp,
+        GatherResources,
+        Defend,
+        RequestReinforcements,
+        PrepareCampaign,
+        BuildWarmachines,
+        TrainGrunts,
+        AssembleArmy,
+        LaunchCampaign,
+        CelebrateVictory,
+        X, Y,
+    };
+
+    mock_systems! {
+        app,
+        BuildCamp,
+        GatherResources,
+        Defend,
+        RequestReinforcements,
+        PrepareCampaign,
+        BuildWarmachines,
+        TrainGrunts,
+        AssembleArmy,
+        LaunchCampaign,
+        CelebrateVictory,
+        X, Y,
+    };
+
+    #[graph(
+        BuildCamp -> (
+            gather: GatherResources,
+            (Defend | RequestReinforcements) -> @reinforce,
+        );
+
+        prepare: PrepareCampaign -> (
+            [gather] -> BuildWarmachines
+            | TrainGrunts
+            | @reinforce
+        );
+
+        victory: CelebrateVictory;
+
+        [prepare] -> AssembleArmy -> LaunchCampaign -> [victory];
+    )]
+    #[params(reinforce)]
+    struct WarchiefCampaign;
+
+    app.world_mut().commands().queue_graph(WarchiefCampaign {
+        reinforce: &orc!(X -> Y),
+    });
 
     // No ECS wind-up: some action resolved at the same frame
     tick(&mut app, 8);

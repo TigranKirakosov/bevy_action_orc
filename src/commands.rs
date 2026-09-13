@@ -7,11 +7,13 @@ use crate::{
 };
 
 pub trait OrcCommandsExt {
-    fn queue_orc(&mut self, graph: Graph);
+    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G);
 }
 
 impl OrcCommandsExt for Commands<'_, '_> {
-    fn queue_orc(&mut self, graph: Graph) {
+    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G) {
+        let graph = graph.into_compiled_graph();
+
         self.queue(move |world: &mut World| {
             let reactor_id = world.commands().spawn_empty().id();
             let mut reactor = Reactor::from(graph);
