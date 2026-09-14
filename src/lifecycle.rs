@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component, Default)]
-pub struct Started<T: FromReflect + TypePath + Default>(#[reflect(ignore)] PhantomData<T>);
+pub struct Active<T: FromReflect + TypePath + Default>(#[reflect(ignore)] PhantomData<T>);
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component, Default)]

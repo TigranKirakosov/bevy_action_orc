@@ -44,6 +44,10 @@ fn drain_orc_messages(world: &mut World) {
     let channel = world.resource::<OrcChannel>();
     let messages: Vec<_> = channel.rx.try_iter().collect();
 
+    if messages.is_empty() {
+        return;
+    }
+
     world.resource_scope::<OrcTypeRegistry, ()>(|world: &mut World, orc_type_registry| {
         let app_type_registry = world.resource::<AppTypeRegistry>().clone();
         let type_registry = app_type_registry.read();
@@ -57,16 +61,36 @@ fn drain_orc_messages(world: &mut World) {
                 .get::<OrcNode>(node_entity)
                 .expect("Missing orc node component.");
 
-            let status_type = *(match status {
-                NodeStatus::Started => orc_type_registry.started.get(&node.type_id),
-                NodeStatus::Resolved(res) => match res {
-                    Resolution::Finished => orc_type_registry.finished.get(&node.type_id),
-                },
-            })
-            .expect("Component TypeId mistmatch.");
+            let (new_status, stale_status) = match status {
+                NodeStatus::Started => {
+                    let target = orc_type_registry
+                        .active
+                        .get(&node.type_id)
+                        .expect("Missing active type registration");
+                    (target, None)
+                }
+                NodeStatus::Resolved(Resolution::Finished) => {
+                    let target = orc_type_registry
+                        .finished
+                        .get(&node.type_id)
+                        .expect("Missing finished type registration");
+                    let stale = orc_type_registry.active.get(&node.type_id);
+                    (target, stale)
+                }
+            };
+
+            let mut entity_mut = world.entity_mut(node_entity);
+
+            if let Some(&stale_status) = stale_status {
+                if let Some(registration) = type_registry.get(stale_status)
+                    && let Some(reflect_component) = registration.data::<ReflectComponent>()
+                {
+                    reflect_component.remove(&mut entity_mut);
+                }
+            }
 
             let registration = type_registry
-                .get(status_type)
+                .get(*new_status)
                 .expect("Missing registration for type");
             let reflect_component = registration
                 .data::<ReflectComponent>()
@@ -76,7 +100,6 @@ fn drain_orc_messages(world: &mut World) {
                 .expect("Missing Default impl for type");
 
             let marker_instance = reflect_default.default();
-            let mut entity_mut = world.entity_mut(node_entity);
 
             reflect_component.insert(
                 &mut entity_mut,

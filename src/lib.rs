@@ -13,10 +13,11 @@ mod tests;
 pub mod prelude {
     use super::*;
 
-    pub use action_orc::{
-        AsGraphEntry, AsGraphEntryProxy, Graph, GraphBounds, GraphBuilder, GraphEntry, Tag, orc,
-    };
-    pub use registry::OrcAppExt;
+    pub use super::{OrcNode, ResolveNode};
+    pub use action_orc::*;
+    pub use commands::*;
+    pub use lifecycle::*;
+    pub use registry::{NodeConstraint, OrcAppExt};
 }
 
 #[derive(Component)]
@@ -74,5 +75,15 @@ impl Orc {
         self.entity_map
             .get(node_id)
             .ok_or(OrcError::NodeEntityMismatch)
+    }
+}
+
+impl OrcNode {
+    pub fn finished(&self) -> ResolveNode {
+        ResolveNode {
+            reactor_id: self.reactor_id,
+            node_id: self.node_id,
+            resolution: Resolution::Finished,
+        }
     }
 }

@@ -1,9 +1,9 @@
 use action_orc::*;
 
 use crate::{
-    OrcNode, OrcPlugin, ResolveNode,
+    OrcNode, OrcPlugin,
     commands::OrcCommandsExt,
-    lifecycle::{Finished, Started},
+    lifecycle::{Active, Finished},
     registry::OrcAppExt,
 };
 use bevy::prelude::*;
@@ -365,6 +365,9 @@ fn warchief_campaign_attr_macro() {
         X, Y,
     };
 
+    #[graph(AssembleArmy -> LaunchCampaign)]
+    struct BetweenPrepareAndVictory;
+
     #[graph(
         BuildCamp -> (
             gather: GatherResources,
@@ -379,7 +382,7 @@ fn warchief_campaign_attr_macro() {
 
         victory: CelebrateVictory;
 
-        [prepare] -> AssembleArmy -> LaunchCampaign -> [victory];
+        [prepare] -> BetweenPrepareAndVictory -> [victory];
     )]
     #[params(reinforce)]
     struct WarchiefCampaign;
@@ -430,24 +433,15 @@ fn warchief_campaign_attr_macro() {
 }
 
 fn on_started<T: FromReflect + TypePath + Default>(
-    started: Query<&OrcNode, Added<Started<T>>>,
+    started: Query<&OrcNode, Added<Active<T>>>,
     mut commands: Commands,
     mut queue: ResMut<Log>,
 ) {
-    for &OrcNode {
-        reactor_id,
-        node_id,
-        ..
-    } in started
-    {
+    for node in started {
         let type_str = get_name::<T>();
         queue.push(("Started", type_str));
 
-        commands.trigger(ResolveNode {
-            reactor_id,
-            node_id,
-            resolution: Resolution::Finished,
-        });
+        commands.trigger(node.finished());
     }
 }
 
