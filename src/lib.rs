@@ -20,10 +20,13 @@ pub mod prelude {
     pub use registry::{NodeConstraint, OrcAppExt};
 }
 
-#[derive(Component)]
+#[derive(Component, Deref, DerefMut)]
 pub struct Orc {
+    #[deref]
     pub(crate) reactor: Reactor,
     pub(crate) entity_map: Vec<Entity>,
+    pub(crate) loop_schedule: bool,
+    pub(crate) active_node_count: usize,
 }
 
 #[derive(Component)]
@@ -54,21 +57,13 @@ impl Plugin for OrcPlugin {
 }
 
 impl Orc {
-    pub(crate) fn new(reactor: Reactor, entity_map: Vec<Entity>) -> Self {
+    pub(crate) fn new(reactor: Reactor, entity_map: Vec<Entity>, loop_schedule: bool) -> Self {
         Self {
             reactor,
+            active_node_count: entity_map.len(),
+            loop_schedule,
             entity_map,
         }
-    }
-
-    pub(crate) fn resolve(
-        &mut self,
-        node_id: NodeId,
-        resolution: Resolution,
-    ) -> Result<(), OrcError> {
-        self.reactor
-            .resolve(node_id, resolution)
-            .map_err(OrcError::Reactor)
     }
 
     pub(crate) fn entity(&self, node_id: NodeId) -> Result<&Entity, OrcError> {

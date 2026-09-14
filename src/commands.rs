@@ -6,12 +6,17 @@ use crate::{
     schedule::{OrcChannel, OrcMessage},
 };
 
+#[derive(Default)]
+pub struct GraphConfig {
+    loop_schedule: bool,
+}
+
 pub trait OrcCommandsExt {
-    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G);
+    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G, config: GraphConfig);
 }
 
 impl OrcCommandsExt for Commands<'_, '_> {
-    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G) {
+    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G, config: GraphConfig) {
         let graph = graph.into_compiled_graph();
 
         self.queue(move |world: &mut World| {
@@ -23,11 +28,14 @@ impl OrcCommandsExt for Commands<'_, '_> {
             for (node_id, meta) in reactor.node_meta() {
                 let type_id = *meta.type_id();
                 let entity = world
-                    .spawn(OrcNode {
-                        type_id,
-                        reactor_id,
-                        node_id,
-                    })
+                    .spawn((
+                        ChildOf(reactor_id),
+                        OrcNode {
+                            type_id,
+                            reactor_id,
+                            node_id,
+                        },
+                    ))
                     .id();
 
                 entity_map.push(entity);
@@ -53,10 +61,11 @@ impl OrcCommandsExt for Commands<'_, '_> {
                     .unwrap();
             }
 
-            world
-                .commands()
-                .entity(reactor_id)
-                .insert(Orc::new(reactor, entity_map));
+            world.commands().entity(reactor_id).insert(Orc::new(
+                reactor,
+                entity_map,
+                config.loop_schedule,
+            ));
         });
     }
 }

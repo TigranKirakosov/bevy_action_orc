@@ -2,7 +2,7 @@ use action_orc::*;
 
 use crate::{
     OrcNode, OrcPlugin,
-    commands::OrcCommandsExt,
+    commands::{GraphConfig, OrcCommandsExt},
     lifecycle::{Active, Finished},
     registry::OrcAppExt,
 };
@@ -45,7 +45,9 @@ fn integration_example() {
         A -> B -> C;
     );
 
-    app.world_mut().commands().queue_graph(graph);
+    app.world_mut()
+        .commands()
+        .queue_graph(graph, GraphConfig::default());
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 4);
@@ -78,7 +80,9 @@ fn parallel_concurrency() {
     let graph = orc!(
         (A | B) -> C;
     );
-    app.world_mut().commands().queue_graph(graph);
+    app.world_mut()
+        .commands()
+        .queue_graph(graph, GraphConfig::default());
 
     tick(&mut app, 2);
 
@@ -119,7 +123,9 @@ fn embedded_linear_composition() {
         Enter -> @sub -> Exit;
     );
 
-    app.world_mut().commands().queue_graph(graph);
+    app.world_mut()
+        .commands()
+        .queue_graph(graph, GraphConfig::default());
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -160,7 +166,9 @@ fn embedded_parallel_composition() {
         Enter -> ( ConcurrentTask | @sub ) -> Exit;
     );
 
-    app.world_mut().commands().queue_graph(graph);
+    app.world_mut()
+        .commands()
+        .queue_graph(graph, GraphConfig::default());
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 5);
@@ -199,7 +207,9 @@ fn embedded_back_to_back_composition() {
     let sub_b = orc!(X -> Y;);
     let graph = orc!(Enter -> @sub_a -> @sub_b -> Exit;);
 
-    app.world_mut().commands().queue_graph(graph);
+    app.world_mut()
+        .commands()
+        .queue_graph(graph, GraphConfig::default());
 
     tick(&mut app, 2); // ECS wind-up
     tick(&mut app, 7);
@@ -286,7 +296,9 @@ fn warchief_campaign() {
     let reinforce = orc!(X -> Y;);
 
     let graph = warchief_campaign(&reinforce);
-    app.world_mut().commands().queue_graph(graph);
+    app.world_mut()
+        .commands()
+        .queue_graph(graph, GraphConfig::default());
 
     // No ECS wind-up: some action resolved at the same frame
     tick(&mut app, 8);
@@ -387,9 +399,12 @@ fn warchief_campaign_attr_macro() {
     #[params(reinforce)]
     struct WarchiefCampaign;
 
-    app.world_mut().commands().queue_graph(WarchiefCampaign {
-        reinforce: &orc!(X -> Y),
-    });
+    app.world_mut().commands().queue_graph(
+        WarchiefCampaign {
+            reinforce: &orc!(X -> Y),
+        },
+        GraphConfig::default(),
+    );
 
     // No ECS wind-up: some action resolved at the same frame
     tick(&mut app, 8);
