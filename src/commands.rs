@@ -2,14 +2,9 @@ use action_orc::*;
 use bevy::{platform::collections::HashSet, prelude::*};
 
 use crate::{
-    Orc, OrcNode,
+    GraphConfig, Orc, OrcNode,
     schedule::{OrcChannel, OrcMessage},
 };
-
-#[derive(Default)]
-pub struct GraphConfig {
-    loop_schedule: bool,
-}
 
 pub trait OrcCommandsExt {
     fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G, config: GraphConfig);
@@ -26,12 +21,11 @@ impl OrcCommandsExt for Commands<'_, '_> {
             let mut type_ids = HashSet::new();
 
             for (node_id, meta) in reactor.node_meta() {
-                let type_id = *meta.type_id();
                 let entity = world
                     .spawn((
                         ChildOf(reactor_id),
                         OrcNode {
-                            type_id,
+                            meta: meta.clone(),
                             reactor_id,
                             node_id,
                         },
@@ -39,7 +33,7 @@ impl OrcCommandsExt for Commands<'_, '_> {
                     .id();
 
                 entity_map.push(entity);
-                type_ids.insert(type_id);
+                type_ids.insert(*meta.type_id());
             }
 
             let tx = world.resource::<OrcChannel>().tx.clone();

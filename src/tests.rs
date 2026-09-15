@@ -1,8 +1,8 @@
 use action_orc::*;
 
 use crate::{
-    OrcNode, OrcPlugin,
-    commands::{GraphConfig, OrcCommandsExt},
+    GraphConfig, OrcNode, OrcPlugin, ResolveOptions,
+    commands::OrcCommandsExt,
     lifecycle::{Active, Finished},
     registry::OrcAppExt,
 };
@@ -447,6 +447,75 @@ fn warchief_campaign_attr_macro() {
         };
 }
 
+#[test]
+fn schedule_restart() {
+    let mut app = App::new();
+    app.add_plugins(OrcPlugin);
+    app.init_resource::<Log>();
+
+    register_nodes!(app, A, B, C);
+    mock_systems!(app, A, B);
+    app.add_systems(
+        Update,
+        (
+            |mut commands: Commands,
+             resolved: Query<&OrcNode, Added<Active<C>>>,
+             mut queue: ResMut<Log>,
+             mut cycles: Local<usize>| {
+                for node in resolved {
+                    let type_str = get_name::<C>();
+                    queue.push(("Started", type_str));
+                    commands.trigger(node.finished(ResolveOptions {
+                        loop_schedule: *cycles < 1,
+                    }));
+                    *cycles += 1;
+                }
+            },
+            on_finished::<C>,
+        )
+            .chain(),
+    );
+
+    let graph = orc!(
+        A -> B -> C;
+    );
+
+    app.world_mut().commands().queue_graph(
+        graph,
+        GraphConfig {
+            loop_schedule: true,
+        },
+    );
+
+    tick(&mut app, 2); // ECS wind-up
+    tick(&mut app, 10);
+
+    let log = app.world().resource::<Log>().as_slice();
+    assert_eq! { log,
+        &[
+        /* Wave 1a */("Started", "A"),
+
+        /* Wave 2a */("Finished", "A"),
+                    ("Started", "B"),
+
+        /* Wave 3a */("Finished", "B"),
+                    ("Started", "C"),
+
+        /* Wave 4a */("Finished", "C"),
+
+        /* Wave 1a */("Started", "A"),
+
+        /* Wave 2b */("Finished", "A"),
+                    ("Started", "B"),
+
+        /* Wave 3b */("Finished", "B"),
+                    ("Started", "C"),
+
+        /* Wave 4b */("Finished", "C"),
+        ]
+    };
+}
+
 fn on_started<T: FromReflect + TypePath + Default>(
     started: Query<&OrcNode, Added<Active<T>>>,
     mut commands: Commands,
@@ -456,7 +525,9 @@ fn on_started<T: FromReflect + TypePath + Default>(
         let type_str = get_name::<T>();
         queue.push(("Started", type_str));
 
-        commands.trigger(node.finished());
+        commands.trigger(node.finished(ResolveOptions {
+            loop_schedule: false,
+        }));
     }
 }
 
