@@ -1,214 +1,116 @@
-use action_orc::{NodeStatus, Resolution};
-use bevy::prelude::*;
-use crossbeam::channel::{Receiver, Sender, unbounded};
-
-use crate::{
-    Orc, OrcError, OrcNode, ResolveNode,
-    reflect::{reflect_insert_default_component, reflect_remove_component},
-    registry::OrcTypeRegistry,
+use action_orc::{
+    LoopDirective, NodeId, NodeStatus, Resolution, ScheduleDirectives, ScheduleState,
 };
+use bevy::prelude::*;
 
-#[derive(Resource)]
-pub struct OrcChannel {
-    pub(crate) tx: Sender<OrcMessage>,
-    pub(crate) rx: Receiver<OrcMessage>,
+use crate::{Orc, OrcNode, registry::OrcRegistry};
+
+#[derive(Message, Clone)]
+pub(crate) struct ResolveNode {
+    pub(crate) orc_id: Entity,
+    pub(crate) node_id: NodeId,
+    pub(crate) resolution: Resolution,
+    pub(crate) schedule_directives: ScheduleDirectives,
 }
 
-pub struct OrcMessage {
-    pub(crate) node_entity: Entity,
-    pub(crate) status: NodeStatus,
+pub struct ResolutionBuilder<'w, 's> {
+    pub(crate) node: &'s OrcNode,
+    pub(crate) commands: Commands<'w, 's>,
+    pub(crate) loop_directive: Option<LoopDirective>,
 }
 
-#[derive(Component)]
-struct Restart;
-
-#[derive(Component)]
-struct Shutdown;
-
-pub(super) fn plugin(app: &mut App) {
-    app.init_resource::<OrcChannel>();
-    app.add_systems(Update, (start_orcs, drain_orc_messages).chain());
-    app.add_systems(
-        PostUpdate,
-        (restart_orcs, shutdown_orcs, check_graph_completion).chain(),
-    );
-    app.add_observer(resolve_node);
-}
-
-fn check_graph_completion(
-    mut commands: Commands,
-    reactors: Query<(Entity, &Orc), (Without<Restart>, Without<Shutdown>)>,
-) {
-    for (entity, orc) in &reactors {
-        if orc.is_schedule_complete() {
-            if orc.loop_schedule {
-                commands.entity(entity).insert(Restart);
-            } else {
-                commands.entity(entity).insert(Shutdown);
-            }
-        }
-    }
+pub(crate) fn plugin(app: &mut App) {
+    app.add_systems(Update, (start_orcs, resolve_nodes, process_orcs).chain());
+    app.add_message::<ResolveNode>();
 }
 
 fn start_orcs(orcs: Query<&mut Orc, Added<Orc>>) -> Result {
     for mut orc in orcs {
-        orc.reactor.start()?;
+        orc.orchestrator.start()?;
     }
 
     Ok(())
 }
 
-fn shutdown_orcs(mut commands: Commands, orcs: Query<(Entity, &Orc), With<Shutdown>>) {
-    for (entity, orc) in orcs {
-        if orc.is_schedule_complete() {
-            // OrcNode's get despawned recursively as they were attached as children
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn restart_orcs(mut commands: Commands, orcs: Query<(Entity, &mut Orc), With<Restart>>) -> Result {
-    for (entity, mut orc) in orcs {
-        if !orc.is_schedule_complete() {
-            continue;
-        }
-
-        commands.entity(entity).remove::<Restart>();
-
-        orc.restart()?;
-        orc.pending_node_statuses = orc.entity_map.len() as i32;
-
-        for &entity in &orc.entity_map {
-            commands.queue(move |world: &mut World| -> Result {
-                world.resource_scope::<OrcTypeRegistry, Result>(
-                    |world: &mut World, orc_type_registry| -> Result {
-                        let app_type_registry = world.resource::<AppTypeRegistry>().clone();
-                        let type_registry = app_type_registry.read();
-
-                        let OrcNode { meta, .. } = world
-                            .get::<OrcNode>(entity)
-                            .ok_or(OrcError::ReactorMissing(entity))?;
-
-                        let (type_id, type_name) = (meta.type_id(), meta.type_name());
-
-                        let active = orc_type_registry.active.get(type_id).ok_or(
-                            OrcError::TypeIdMissing {
-                                status: "Active",
-                                type_name,
-                            },
-                        )?;
-
-                        let finished = orc_type_registry.finished.get(type_id).ok_or(
-                            OrcError::TypeIdMissing {
-                                status: "Finished",
-                                type_name,
-                            },
-                        )?;
-
-                        for &type_id in [active, finished] {
-                            reflect_remove_component(world, entity, type_id, &type_registry);
-                        }
-                        Ok(())
-                    },
-                )?;
-                Ok(())
-            });
-        }
-    }
-    Ok(())
-}
-
-fn resolve_node(on: On<ResolveNode>, mut reactors: Query<&mut Orc>) -> Result {
-    let &ResolveNode {
-        reactor_id,
+fn resolve_nodes(mut messages: MessageReader<ResolveNode>, mut orcs: Query<&mut Orc>) -> Result {
+    for &ResolveNode {
+        orc_id,
         node_id,
         resolution,
-        ref options,
-    } = on.event();
-
-    let mut reactor = reactors.get_mut(reactor_id)?;
-    let _ = reactor.resolve(node_id, resolution)?;
-    reactor.loop_schedule = options.loop_schedule;
-
-    Ok(())
-}
-
-fn drain_orc_messages(world: &mut World) -> Result {
-    let channel = world.resource::<OrcChannel>();
-    let messages: Vec<_> = channel.rx.try_iter().collect();
-
-    if messages.is_empty() {
-        return Ok(());
+        ref schedule_directives,
+    } in messages.read()
+    {
+        let mut orc = orcs.get_mut(orc_id)?;
+        orc.orchestrator.config_schedule(schedule_directives);
+        let tx = orc.orchestrator.resolver();
+        tx.send((node_id, resolution))?;
     }
 
-    world.resource_scope::<OrcTypeRegistry, Result>(
-        |world: &mut World, orc_type_registry| -> Result {
-            let app_type_registry = world.resource::<AppTypeRegistry>().clone();
-            let type_registry = app_type_registry.read();
+    Ok(())
+}
 
-            for OrcMessage {
-                node_entity,
-                status,
-            } in messages
-            {
-                let &OrcNode {
-                    reactor_id,
-                    ref meta,
-                    ..
-                } = world
-                    .get::<OrcNode>(node_entity)
-                    .ok_or(OrcError::NodeMissing(node_entity))?;
-
-                let (type_id, type_name) = (meta.type_id(), meta.type_name());
-
-                let (new_status, stale_status) = match status {
-                    NodeStatus::Started => {
-                        let target = orc_type_registry.active.get(type_id).ok_or(
-                            OrcError::TypeIdMissing {
-                                status: "Active",
-                                type_name,
-                            },
-                        )?;
-                        (target, None)
-                    }
-                    NodeStatus::Resolved(Resolution::Finished) => {
-                        let target = orc_type_registry.finished.get(type_id).ok_or(
-                            OrcError::TypeIdMissing {
-                                status: "Finished",
-                                type_name,
-                            },
-                        )?;
-                        let stale = orc_type_registry.active.get(type_id);
-                        (target, stale)
-                    }
-                };
-
-                let status_delta = match status {
-                    NodeStatus::Started => 1,
-                    NodeStatus::Resolved(Resolution::Finished) => -1,
-                };
-
-                let mut orc = world
-                    .get_mut::<Orc>(reactor_id)
-                    .ok_or(OrcError::ReactorMissing(reactor_id))?;
-                orc.apply_pending_statuses_delta(status_delta);
-
-                if let Some(&stale_status) = stale_status {
-                    reflect_remove_component(world, node_entity, stale_status, &type_registry);
-                }
-
-                reflect_insert_default_component(world, node_entity, *new_status, &type_registry);
+fn process_orcs(
+    mut commands: Commands,
+    orcs: Query<(Entity, &mut Orc)>,
+    registry: Res<OrcRegistry>,
+) -> Result {
+    for (entity, mut orc) in orcs {
+        match orc.orchestrator.tick()? {
+            ScheduleState::Ended => {
+                commands.entity(entity).despawn();
+                continue;
             }
-            Ok(())
-        },
-    )?;
+            ScheduleState::Restarted => {
+                for (&entity, (_, meta)) in orc.entity_map.iter().zip(orc.orchestrator.node_meta())
+                {
+                    registry.reset(commands.reborrow(), entity, meta)?;
+                }
+            }
+            _ => {}
+        }
+
+        for (id, status) in orc.orchestrator.drain_events() {
+            let node_entity = orc.entity_map[id];
+            let (_, meta) = orc.orchestrator.node_meta()[id];
+
+            match status {
+                NodeStatus::Started => {
+                    registry.start(commands.reborrow(), node_entity, meta)?;
+                }
+                NodeStatus::Resolved(Resolution::Finished) => {
+                    registry.finish(commands.reborrow(), node_entity, meta)?;
+                }
+            }
+        }
+    }
 
     Ok(())
 }
 
-impl Default for OrcChannel {
-    fn default() -> Self {
-        let (tx, rx) = unbounded();
-        Self { tx, rx }
+impl OrcNode {
+    pub fn resolver<'w, 's>(&'s self, commands: Commands<'w, 's>) -> ResolutionBuilder<'w, 's> {
+        ResolutionBuilder {
+            node: self,
+            commands,
+            loop_directive: None,
+        }
+    }
+}
+
+impl<'w, 's> ResolutionBuilder<'w, 's> {
+    pub fn cancel_loop(mut self) -> Self {
+        self.loop_directive = Some(LoopDirective::Break);
+        self
+    }
+
+    pub fn finish(mut self) {
+        self.commands.write_message(ResolveNode {
+            orc_id: self.node.orc_id,
+            node_id: self.node.node_id,
+            resolution: Resolution::Finished,
+            schedule_directives: ScheduleDirectives {
+                loop_directive: self.loop_directive,
+            },
+        });
     }
 }
