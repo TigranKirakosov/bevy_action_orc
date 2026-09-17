@@ -3,7 +3,7 @@ use action_orc::{
 };
 use bevy::prelude::*;
 
-use crate::{Orc, OrcNode, registry::OrcRegistry};
+use crate::{Orc, OrcNode, dispatcher::Dispatcher};
 
 #[derive(Message, Clone)]
 pub(crate) struct ResolveNode {
@@ -52,7 +52,7 @@ fn resolve_nodes(mut messages: MessageReader<ResolveNode>, mut orcs: Query<&mut 
 fn process_orcs(
     mut commands: Commands,
     orcs: Query<(Entity, &mut Orc)>,
-    registry: Res<OrcRegistry>,
+    registry: Res<Dispatcher>,
 ) -> Result {
     for (entity, mut orc) in orcs {
         match orc.orchestrator.tick()? {

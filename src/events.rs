@@ -3,21 +3,23 @@ use std::marker::PhantomData;
 
 use crate::prelude::NodeConstraint;
 
-#[derive(Event)]
-pub(crate) struct NodeStarted<T: NodeConstraint> {
+#[derive(Event, Deref)]
+pub struct NodeStarted<T: NodeConstraint> {
+    #[deref]
     pub(crate) entity: Entity,
     pub(crate) _marker: PhantomData<T>,
 }
 
-#[derive(Event)]
-pub(crate) struct NodeFinished<T: NodeConstraint> {
+#[derive(Event, Deref)]
+pub struct NodeFinished<T: NodeConstraint> {
+    #[deref]
     pub(crate) entity: Entity,
     pub(crate) _marker: PhantomData<T>,
 }
 
-#[derive(EntityEvent)]
-pub(crate) struct NodeReset<T: NodeConstraint> {
-    #[event_target]
+#[derive(Event, Deref)]
+pub struct NodeReset<T: NodeConstraint> {
+    #[deref]
     pub(crate) entity: Entity,
     pub(crate) _marker: PhantomData<T>,
 }

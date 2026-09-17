@@ -3,9 +3,9 @@ use action_orc::*;
 use crate::{
     GraphConfig, OrcNode, OrcPlugin,
     commands::OrcCommandsExt,
-    lifecycle::Active,
+    dispatcher::OrcAppExt,
+    events::Active,
     prelude::{NodeConstraint, NodeFinished, NodeStarted},
-    registry::OrcAppExt,
 };
 use bevy::prelude::*;
 use local_macros::*;

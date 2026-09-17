@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use std::fmt;
 
 mod commands;
-mod lifecycle;
-mod registry;
+mod dispatcher;
+mod events;
 mod schedule;
 
 #[cfg(test)]
@@ -16,8 +16,8 @@ pub mod prelude {
     pub use super::OrcNode;
     pub use action_orc::*;
     pub use commands::*;
-    pub use lifecycle::*;
-    pub use registry::{NodeConstraint, OrcAppExt};
+    pub use dispatcher::{NodeConstraint, OrcAppExt};
+    pub use events::*;
 }
 
 #[derive(Component)]
@@ -85,6 +85,6 @@ pub struct GraphConfig {
 pub struct OrcPlugin;
 impl Plugin for OrcPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((registry::plugin, schedule::plugin));
+        app.add_plugins((dispatcher::plugin, schedule::plugin));
     }
 }
