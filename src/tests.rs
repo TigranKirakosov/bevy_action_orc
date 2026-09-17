@@ -1,7 +1,7 @@
 use action_orc::*;
 
 use crate::{
-    GraphConfig, OrcNode, OrcPlugin,
+    OrcNode, OrcPlugin,
     commands::OrcCommandsExt,
     dispatcher::OrcAppExt,
     events::Active,
@@ -49,7 +49,7 @@ fn integration_example() {
 
     app.world_mut()
         .commands()
-        .queue_graph(graph, GraphConfig::default());
+        .queue_graph(graph, Config::default());
 
     tick(&mut app, 3); // ECS wind-up
     tick(&mut app, 4);
@@ -84,7 +84,7 @@ fn parallel_concurrency() {
     );
     app.world_mut()
         .commands()
-        .queue_graph(graph, GraphConfig::default());
+        .queue_graph(graph, Config::default());
 
     tick(&mut app, 2);
 
@@ -127,7 +127,7 @@ fn embedded_linear_composition() {
 
     app.world_mut()
         .commands()
-        .queue_graph(graph, GraphConfig::default());
+        .queue_graph(graph, Config::default());
 
     tick(&mut app, 4); // ECS wind-up
     tick(&mut app, 5);
@@ -170,7 +170,7 @@ fn embedded_parallel_composition() {
 
     app.world_mut()
         .commands()
-        .queue_graph(graph, GraphConfig::default());
+        .queue_graph(graph, Config::default());
 
     tick(&mut app, 4); // ECS wind-up
     tick(&mut app, 5);
@@ -211,7 +211,7 @@ fn embedded_back_to_back_composition() {
 
     app.world_mut()
         .commands()
-        .queue_graph(graph, GraphConfig::default());
+        .queue_graph(graph, Config::default());
 
     tick(&mut app, 6); // ECS wind-up
     tick(&mut app, 7);
@@ -300,7 +300,7 @@ fn warchief_campaign() {
     let graph = warchief_campaign(&reinforce);
     app.world_mut()
         .commands()
-        .queue_graph(graph, GraphConfig::default());
+        .queue_graph(graph, Config::default());
 
     tick(&mut app, 3); // ECS wind-up
     tick(&mut app, 8);
@@ -406,7 +406,7 @@ fn warchief_campaign_attr_macro() {
         WarchiefCampaign {
             reinforce: &orc!(X -> Y),
         },
-        GraphConfig::default(),
+        Config::default(),
     );
 
     tick(&mut app, 3); // ECS wind-up
@@ -466,7 +466,7 @@ fn schedule_loop() {
 
     app.world_mut().commands().queue_graph(
         graph,
-        GraphConfig {
+        Config {
             loop_schedule: true,
         },
     );
@@ -527,7 +527,7 @@ fn schedule_loop_cancel() {
 
     app.world_mut().commands().queue_graph(
         graph,
-        GraphConfig {
+        Config {
             loop_schedule: true,
         },
     );

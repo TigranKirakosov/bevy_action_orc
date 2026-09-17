@@ -77,11 +77,6 @@ impl From<ReactorError> for OrcError {
     }
 }
 
-#[derive(Default)]
-pub struct GraphConfig {
-    pub loop_schedule: bool,
-}
-
 pub struct OrcPlugin;
 impl Plugin for OrcPlugin {
     fn build(&self, app: &mut App) {

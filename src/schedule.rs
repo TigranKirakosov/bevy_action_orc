@@ -1,6 +1,4 @@
-use action_orc::{
-    LoopDirective, NodeId, NodeStatus, Resolution, ScheduleDirectives, ScheduleState,
-};
+use action_orc::{NodeCommand, NodeId, NodeStatus, Resolution, ScheduleDirective, State};
 use bevy::prelude::*;
 
 use crate::{Orc, OrcNode, dispatcher::Dispatcher};
@@ -9,14 +7,14 @@ use crate::{Orc, OrcNode, dispatcher::Dispatcher};
 pub(crate) struct ResolveNode {
     pub(crate) orc_id: Entity,
     pub(crate) node_id: NodeId,
-    pub(crate) resolution: Resolution,
-    pub(crate) schedule_directives: ScheduleDirectives,
+    pub(crate) command: NodeCommand,
+    pub(crate) loop_schedule: Option<bool>,
 }
 
 pub struct ResolutionBuilder<'w, 's> {
     pub(crate) node: &'s OrcNode,
     pub(crate) commands: Commands<'w, 's>,
-    pub(crate) loop_directive: Option<LoopDirective>,
+    pub(crate) loop_schedule: Option<bool>,
 }
 
 pub(crate) fn plugin(app: &mut App) {
@@ -35,15 +33,18 @@ fn start_orcs(orcs: Query<&mut Orc, Added<Orc>>) -> Result {
 fn resolve_nodes(mut messages: MessageReader<ResolveNode>, mut orcs: Query<&mut Orc>) -> Result {
     for &ResolveNode {
         orc_id,
-        node_id,
-        resolution,
-        ref schedule_directives,
+        command,
+        loop_schedule,
+        ..
     } in messages.read()
     {
         let mut orc = orcs.get_mut(orc_id)?;
-        orc.orchestrator.config_schedule(schedule_directives);
+        if let Some(loop_schedule) = loop_schedule {
+            orc.orchestrator.config_schedule_mut().loop_schedule = loop_schedule;
+        }
+
         let tx = orc.orchestrator.resolver();
-        tx.send((node_id, resolution))?;
+        tx.send(command)?;
     }
 
     Ok(())
@@ -56,11 +57,11 @@ fn process_orcs(
 ) -> Result {
     for (entity, mut orc) in orcs {
         match orc.orchestrator.tick()? {
-            ScheduleState::Ended => {
+            State::Ended => {
                 commands.entity(entity).despawn();
                 continue;
             }
-            ScheduleState::Restarted => {
+            State::Restarted => {
                 for (&entity, (_, meta)) in orc.entity_map.iter().zip(orc.orchestrator.node_meta())
                 {
                     registry.reset(commands.reborrow(), entity, meta)?;
@@ -77,9 +78,14 @@ fn process_orcs(
                 NodeStatus::Started => {
                     registry.start(commands.reborrow(), node_entity, meta)?;
                 }
-                NodeStatus::Resolved(Resolution::Finished) => {
-                    registry.finish(commands.reborrow(), node_entity, meta)?;
-                }
+                NodeStatus::Resolved(resoulution) => match resoulution {
+                    Resolution::Finished => {
+                        registry.finish(commands.reborrow(), node_entity, meta)?;
+                    }
+                    Resolution::Reset => {
+                        registry.reset(commands.reborrow(), node_entity, meta)?;
+                    }
+                },
             }
         }
     }
@@ -92,14 +98,14 @@ impl OrcNode {
         ResolutionBuilder {
             node: self,
             commands,
-            loop_directive: None,
+            loop_schedule: None,
         }
     }
 }
 
 impl<'w, 's> ResolutionBuilder<'w, 's> {
     pub fn cancel_loop(mut self) -> Self {
-        self.loop_directive = Some(LoopDirective::Break);
+        self.loop_schedule = Some(false);
         self
     }
 
@@ -107,10 +113,12 @@ impl<'w, 's> ResolutionBuilder<'w, 's> {
         self.commands.write_message(ResolveNode {
             orc_id: self.node.orc_id,
             node_id: self.node.node_id,
-            resolution: Resolution::Finished,
-            schedule_directives: ScheduleDirectives {
-                loop_directive: self.loop_directive,
+            command: NodeCommand {
+                schedule_directive: ScheduleDirective::Advance {
+                    pivot: self.node.node_id,
+                },
             },
+            loop_schedule: self.loop_schedule,
         });
     }
 }

@@ -1,24 +1,19 @@
 use action_orc::*;
 use bevy::prelude::*;
 
-use crate::{GraphConfig, Orc, OrcNode};
+use crate::{Orc, OrcNode};
 
 pub trait OrcCommandsExt {
-    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G, config: GraphConfig);
+    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G, config: Config);
 }
 
 impl OrcCommandsExt for Commands<'_, '_> {
-    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G, config: GraphConfig) {
+    fn queue_graph<'a, G: AsGraphEntryProxy<'a>>(&mut self, graph: G, config: Config) {
         let graph = graph.into_compiled_graph();
 
         self.queue(move |world: &mut World| -> Result {
             let orchestrator_id = world.spawn_empty().id();
-            let orchestrator = Orchestrator::new(
-                &graph,
-                ScheduleConfig {
-                    should_loop: config.loop_schedule,
-                },
-            )?;
+            let orchestrator = Orchestrator::new(&graph, config)?;
             let node_meta = orchestrator.node_meta();
             let mut entity_map = Vec::with_capacity(node_meta.len());
 
